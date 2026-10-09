@@ -50,6 +50,126 @@ bool containsIgnoreCase(const String &haystack, const char *needle)
     lowerNeedle.toLowerCase();
     return lowerHaystack.indexOf(lowerNeedle) >= 0;
 }
+
+constexpr uint8_t REMOTE_ID_SERVICE_DATA_TYPE = 0x16;
+constexpr uint8_t REMOTE_ID_SERVICE_UUID_LSB = 0xfa;
+constexpr uint8_t REMOTE_ID_SERVICE_UUID_MSB = 0xff;
+constexpr uint8_t REMOTE_ID_SERVICE_IDENTIFIER = 0x0d;
+
+bool copyBasicRemoteId(const uint8_t *message, size_t length, char *output, size_t outputLength)
+{
+    if (message == nullptr || output == nullptr || outputLength < 2 || length < 21 ||
+        (message[0] >> 4) != 0)
+        return false;
+
+    size_t idLength = 20;
+    while (idLength > 0 && (message[idLength] == 0 || message[idLength] == ' '))
+        --idLength;
+    if (idLength == 0)
+        return false;
+
+    bool printable = true;
+    for (size_t index = 1; index <= idLength; ++index) {
+        const uint8_t value = message[index];
+        if (value < 0x20 || value > 0x7e) {
+            printable = false;
+            break;
+        }
+    }
+
+    if (printable) {
+        const size_t copyLength = std::min(idLength, outputLength - 1);
+        memcpy(output, message + 1, copyLength);
+        output[copyLength] = '\0';
+        return copyLength != 0;
+    }
+
+    // Preserve binary IDs in a watchlist-safe representation rather than
+    // dropping a valid Basic ID that is not ASCII.
+    const size_t maxBytes = std::min(idLength, (outputLength - 1) / 2);
+    size_t cursor = 0;
+    for (size_t index = 0; index < maxBytes; ++index) {
+        snprintf(output + cursor, outputLength - cursor, "%02x", message[index + 1]);
+        cursor += 2;
+    }
+    output[cursor] = '\0';
+    return cursor != 0;
+}
+
+bool decodeRemoteIdMessages(const uint8_t *data, size_t length, char *output, size_t outputLength)
+{
+    if (copyBasicRemoteId(data, length, output, outputLength))
+        return true;
+
+    // A packed BLE/Wi-Fi message begins with a packed-message header and then
+    // contains fixed-size OpenDroneID messages. Basic ID may be any member.
+    if (data != nullptr && length >= 26 && (data[0] >> 4) == 0x0f) {
+        for (size_t offset = 1; offset + 25 <= length; offset += 25) {
+            if (copyBasicRemoteId(data + offset, length - offset, output, outputLength))
+                return true;
+        }
+    }
+    return false;
+}
+
+bool decodeBleRemoteId(const uint8_t *payload, size_t length, char *output, size_t outputLength)
+{
+    if (payload == nullptr || length < 5)
+        return false;
+
+    size_t offset = 0;
+    while (offset + 2 <= length) {
+        const uint8_t adLength = payload[offset];
+        if (adLength == 0)
+            break;
+        if (offset + 1 + adLength > length)
+            break;
+
+        if (payload[offset + 1] == REMOTE_ID_SERVICE_DATA_TYPE && adLength >= 6 &&
+            payload[offset + 2] == REMOTE_ID_SERVICE_UUID_LSB &&
+            payload[offset + 3] == REMOTE_ID_SERVICE_UUID_MSB &&
+            payload[offset + 4] == REMOTE_ID_SERVICE_IDENTIFIER) {
+            const uint8_t *message = payload + offset + 5;
+            const size_t messageLength = adLength - 4;
+            if (decodeRemoteIdMessages(message, messageLength, output, outputLength))
+                return true;
+            // Keep compatibility with the offset used by the upstream
+            // Sky-Spy parser for packed advertisements with an extra byte.
+            if (messageLength > 1 && decodeRemoteIdMessages(message + 1, messageLength - 1, output, outputLength))
+                return true;
+        }
+        offset += 1 + adLength;
+    }
+    return false;
+}
+
+bool decodeWifiRemoteId(const uint8_t *frame, size_t length, char *output, size_t outputLength)
+{
+    if (frame == nullptr || length < 36)
+        return false;
+
+    // Sky-Spy's Wi-Fi decoder receives Remote ID vendor IEs from NAN action
+    // frames. The two OUIs below are the vendor forms used by current
+    // OpenDroneID transmitters; the parser remains limited to management data.
+    for (size_t offset = 24; offset + 2 <= length;) {
+        const uint8_t elementLength = frame[offset + 1];
+        if (elementLength == 0 || offset + 2 + elementLength > length)
+            break;
+        if (frame[offset] == 0xdd && elementLength >= 8) {
+            const uint8_t *element = frame + offset + 2;
+            const bool knownOui = (element[0] == 0x90 && element[1] == 0x3a && element[2] == 0xe6) ||
+                                  (element[0] == 0xfa && element[1] == 0x0b && element[2] == 0xbc);
+            if (knownOui) {
+                for (size_t start = 5; start <= 7 && start < elementLength; ++start) {
+                    if (decodeRemoteIdMessages(element + start, elementLength - start, output, outputLength))
+                        return true;
+                }
+            }
+        }
+        offset += 2 + elementLength;
+    }
+    return false;
+}
 } // namespace
 
 namespace
@@ -98,6 +218,8 @@ void ouiSpyWifiPromiscuous(void *buffer, wifi_promiscuous_pkt_type_t type)
         return;
 
     const auto *header = reinterpret_cast<const WifiMacHeader *>(packet->payload);
+    if (type == WIFI_PKT_MGMT)
+        ouiSpyModule->recordWifiRemoteId(packet->payload, packet->rx_ctrl.sig_len, packet->rx_ctrl.rssi);
     // Flock-You starts with broad transmitter-OUI matching. Address 1/3
     // echo matching is added once normalized records and deduplication land.
     if (matchesFlockOui(header->addr2))
@@ -351,6 +473,16 @@ void OuiSpyModule::recordBleAdvertisement(BLEAdvertisedDevice &device)
     if (address == nullptr || address[0] == '\0')
         return;
 
+    if (config.scannerEnabled && config.skySpyEnabled && config.droneIdsEnabled) {
+        char droneId[40] = {};
+        const uint8_t *payload = device.getPayload();
+        const int payloadLength = device.getPayloadLength();
+        if (payload != nullptr && payloadLength > 0 &&
+            decodeBleRemoteId(payload, static_cast<size_t>(payloadLength), droneId, sizeof(droneId))) {
+            recordDroneId(droneId, rssi);
+        }
+    }
+
     const char *watchlistLabel = nullptr;
     const bool axonMatch = matchesWatchlist(device, address, &watchlistLabel);
 
@@ -455,6 +587,16 @@ void OuiSpyModule::recordDroneId(const char *droneId, int rssi)
                  normalizedId.c_str(), rssi);
         queueBleObservation("drone_id_watchlist_match", normalizedId.c_str(), rssi, watchlistLabel);
     }
+}
+
+void OuiSpyModule::recordWifiRemoteId(const uint8_t *frame, size_t length, int rssi)
+{
+    if (!config.scannerEnabled || !config.skySpyEnabled || !config.droneIdsEnabled)
+        return;
+
+    char droneId[40] = {};
+    if (decodeWifiRemoteId(frame, length, droneId, sizeof(droneId)))
+        recordDroneId(droneId, rssi);
 }
 
 int OuiSpyModule::handleUiInputEvent(const InputEvent *event)
@@ -981,15 +1123,17 @@ int32_t OuiSpyModule::runOnce()
     configureFlockMonitor();
 
     const bool wantFlock = config.scannerEnabled && config.flockYouEnabled;
-    if (wantFlock && flockCallbackReady && !flockPromiscuousEnabled && WiFi.getMode() != WIFI_OFF) {
+    const bool wantSkySpy = config.scannerEnabled && config.skySpyEnabled && config.droneIdsEnabled;
+    if ((wantFlock || wantSkySpy) && flockCallbackReady && !flockPromiscuousEnabled && WiFi.getMode() != WIFI_OFF) {
         if (esp_wifi_set_promiscuous(true) == ESP_OK) {
             flockPromiscuousEnabled = true;
-            LOG_INFO("OUI-SPY Flock-You current-channel monitor enabled");
+            LOG_INFO("OUI-SPY Wi-Fi monitor enabled (%s%s)", wantFlock ? "Flock-You" : "",
+                     wantFlock && wantSkySpy ? "+Sky-Spy" : wantSkySpy ? "Sky-Spy" : "");
         }
-    } else if (!wantFlock && flockPromiscuousEnabled) {
+    } else if (!wantFlock && !wantSkySpy && flockPromiscuousEnabled) {
         esp_wifi_set_promiscuous(false);
         flockPromiscuousEnabled = false;
-        LOG_INFO("OUI-SPY Flock-You current-channel monitor disabled");
+        LOG_INFO("OUI-SPY Wi-Fi monitor disabled");
     }
 
     const bool phoneBleConnected = nimbleBluetooth != nullptr && nimbleBluetooth->isConnected();
@@ -1004,7 +1148,9 @@ int32_t OuiSpyModule::runOnce()
         nextBleScanMs = millis();
     }
 
-    if (config.scannerEnabled && config.bleSniffEnabled && bleScanReady && !bleScanPausedForPhone &&
+    const bool wantBleScan = config.scannerEnabled &&
+                             (config.bleSniffEnabled || (config.skySpyEnabled && config.droneIdsEnabled));
+    if (wantBleScan && bleScanReady && !bleScanPausedForPhone &&
         !BLEDevice::getScan()->isScanning() && static_cast<int32_t>(millis() - nextBleScanMs) >= 0) {
         BLEAdvertising *advertising = BLEDevice::getAdvertising();
         if (advertising != nullptr && advertising->isAdvertising()) {

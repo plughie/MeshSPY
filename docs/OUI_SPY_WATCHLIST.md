@@ -34,13 +34,16 @@ Watchlist matches are logged and can generate ordinary Meshtastic alerts when
 fallbacks when the Watchlist setting is enabled.
 
 Drone Remote IDs are separate from BLE vendor/device matching. Enable both
-**Sky-Spy** and **Drone IDs** in **Tools → OUI-SPY** to accept normalized Remote
-ID observations from the Sky-Spy detector. `DRONE` entries are exact matches
-after lowercasing and removing spaces, colons, and hyphens. Drone events are
-written to the same JSONL history with `drone_id_new`, `drone_id_returned`,
-`drone_id_watchlist_match`, and `drone_id_lost` event names. The current
-integration boundary is ready for the Remote ID decoder; ordinary BLE
-advertisements are not treated as drone IDs.
+**Sky-Spy** and **Drone IDs** in **Tools → OUI-SPY** to enable the decoder.
+Sky-Spy recognizes OpenDroneID Basic ID messages in BLE service-data
+advertisements and supported Wi-Fi management-frame vendor elements. `DRONE`
+entries are exact matches after lowercasing and removing spaces, colons, and
+hyphens. Drone events are written to the same JSONL history with
+`drone_id_new`, `drone_id_returned`, `drone_id_watchlist_match`, and
+`drone_id_lost` event names. Ordinary BLE advertisements are not treated as
+drone IDs. Wi-Fi decoding listens on the current Wi-Fi channel so the
+Meshtastic network connection is not disrupted; channel hopping is not yet
+enabled.
 
 ## Detection history
 

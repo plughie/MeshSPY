@@ -21,11 +21,14 @@ the T-Deck select button to open its settings screen.
 - `BACK` / `CANCEL`: return without saving
 
 The settings currently cover the master scanner switch, Flock-You, Foxhunter,
-Sky-Spy, BLE Sniff, watchlist matching, mesh alerts, GPS inclusion, and an
-alert-channel slot. They are stored locally in the ESP32 NVS namespace
+Sky-Spy, BLE Sniff, watchlist matching, Drone IDs, mesh alerts, GPS inclusion,
+and an alert-channel slot. They are stored locally in the ESP32 NVS namespace
 `meshspy`. All switches default to off except GPS inclusion. Enabled BLE
 recognition records state transitions to `/OUI-SPY/observations.jsonl` on the
-SD card; mesh alerts remain independently configurable.
+SD card; mesh alerts remain independently configurable. Sky-Spy decodes
+OpenDroneID Basic ID messages received in BLE service-data advertisements and
+supported Wi-Fi management frames. Wi-Fi Remote ID detection is limited to the
+current Wi-Fi channel.
 
 ## Flash
 

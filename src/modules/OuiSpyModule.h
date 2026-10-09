@@ -8,6 +8,8 @@
 #include "concurrency/OSThread.h"
 #include "input/InputBroker.h"
 
+#include <stddef.h>
+
 class BLEAdvertisedDevice;
 
 /**
@@ -33,6 +35,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     void uiCycleAlertChannel();
     void recordBleAdvertisement(BLEAdvertisedDevice &device);
     void recordDroneId(const char *droneId, int rssi);
+    void recordWifiRemoteId(const uint8_t *frame, size_t length, int rssi);
     void recordFlockObservation(int rssi);
 
     bool wantUIFrame() override { return true; }
