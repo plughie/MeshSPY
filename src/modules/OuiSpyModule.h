@@ -32,6 +32,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     const char *uiAlertChannelName() const;
     void uiCycleAlertChannel();
     void recordBleAdvertisement(BLEAdvertisedDevice &device);
+    void recordDroneId(const char *droneId, int rssi);
     void recordFlockObservation(int rssi);
 
     bool wantUIFrame() override { return true; }
@@ -51,6 +52,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
         bool skySpyEnabled = false;
         bool bleSniffEnabled = false;
         bool axonWatchlistEnabled = false;
+        bool droneIdsEnabled = false;
         bool meshAlertsEnabled = false;
         bool includeGps = true;
         uint8_t alertChannel = 0;
@@ -74,12 +76,23 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
 
     struct PendingBleObservation {
         char event[24] = {};
-        char address[18] = {};
+        char identifier[40] = {};
         char label[32] = {};
         int8_t rssi = 0;
     };
 
+    struct DronePresence {
+        char identifier[40] = {};
+        uint32_t lastSeenMs = 0;
+        int8_t lastRssi = 0;
+        bool active = false;
+        bool announced = false;
+        bool watchlistMatched = false;
+        bool watchlistAnnounced = false;
+    };
+
     static constexpr uint8_t MAX_BLE_PRESENCE = 32;
+    static constexpr uint8_t MAX_DRONE_PRESENCE = 16;
     static constexpr uint8_t MAX_WATCHLIST_ENTRIES = 64;
     static constexpr uint8_t MAX_PENDING_BLE_OBSERVATIONS = 8;
 
@@ -97,7 +110,9 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     void drawSettings(OLEDDisplay *display, int16_t x, int16_t y);
     bool sendMeshAlert(const char *message);
     void processBlePresence();
+    void processDronePresence();
     bool matchesWatchlist(BLEAdvertisedDevice &device, const char *address, const char **label) const;
+    bool matchesDroneWatchlist(const char *droneId, const char **label) const;
     bool frameWasRecentlyDrawn() const;
 
     CallbackObserver<OuiSpyModule, const InputEvent *> inputObserver =
@@ -122,6 +137,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     bool bleScanStartWarningLogged = false;
     bool bleAdvertisingPausedForScan = false;
     BlePresence blePresence[MAX_BLE_PRESENCE];
+    DronePresence dronePresence[MAX_DRONE_PRESENCE];
     WatchlistEntry watchlist[MAX_WATCHLIST_ENTRIES];
     uint8_t watchlistCount = 0;
     bool watchlistLoaded = false;

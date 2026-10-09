@@ -35,14 +35,14 @@ overlay = f'''    // {marker}
         lv_obj_t *title = lv_label_create(panel);
         lv_label_set_text(title, "OUI-SPY controls");
         lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
-        static const char *const names[] = {{"Scanner", "Flock-You", "Foxhunter", "Sky-Spy", "BLE Sniff", "Watchlist", "Mesh alerts", "GPS tags", "Alert channel"}};
-        for (uint8_t index = 0; index < 9; ++index) {{
+        static const char *const names[] = {{"Scanner", "Flock-You", "Foxhunter", "Sky-Spy", "BLE Sniff", "Watchlist", "Drone IDs", "Mesh alerts", "GPS tags", "Alert channel"}};
+        for (uint8_t index = 0; index < 10; ++index) {{
             lv_obj_t *button = lv_btn_create(panel);
             lv_obj_set_width(button, LV_PCT(100));
             lv_obj_set_height(button, 20);
             lv_obj_set_user_data(button, reinterpret_cast<void *>(static_cast<uintptr_t>(index)));
             lv_obj_t *label = lv_label_create(button);
-            if (index == 8)
+            if (index == 9)
                 lv_label_set_text_fmt(label, "%s: %s", names[index], ouiSpyUiAlertChannelName());
             else
                 lv_label_set_text_fmt(label, "%s: %s", names[index],
@@ -54,8 +54,8 @@ overlay = f'''    // {marker}
                 lv_obj_t *button = static_cast<lv_obj_t *>(lv_event_get_target(toggleEvent));
                 uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(button)));
                 lv_obj_t *label = lv_obj_get_child(button, 0);
-                static const char *const names[] = {{"Scanner", "Flock-You", "Foxhunter", "Sky-Spy", "BLE Sniff", "Watchlist", "Mesh alerts", "GPS tags", "Alert channel"}};
-                if (index == 8) {{
+                static const char *const names[] = {{"Scanner", "Flock-You", "Foxhunter", "Sky-Spy", "BLE Sniff", "Watchlist", "Drone IDs", "Mesh alerts", "GPS tags", "Alert channel"}};
+                if (index == 9) {{
                     ouiSpyUiCycleAlertChannel();
                     lv_label_set_text_fmt(label, "%s: %s", names[index], ouiSpyUiAlertChannelName());
                 }} else {{

@@ -161,8 +161,10 @@ bool OuiSpyModule::uiSettingEnabled(uint8_t index) const
     case 5:
         return config.axonWatchlistEnabled;
     case 6:
-        return config.meshAlertsEnabled;
+        return config.droneIdsEnabled;
     case 7:
+        return config.meshAlertsEnabled;
+    case 8:
         return config.includeGps;
     default:
         return false;
@@ -191,9 +193,12 @@ void OuiSpyModule::uiToggleSetting(uint8_t index)
         config.axonWatchlistEnabled = !config.axonWatchlistEnabled;
         break;
     case 6:
-        config.meshAlertsEnabled = !config.meshAlertsEnabled;
+        config.droneIdsEnabled = !config.droneIdsEnabled;
         break;
     case 7:
+        config.meshAlertsEnabled = !config.meshAlertsEnabled;
+        break;
+    case 8:
         config.includeGps = !config.includeGps;
         break;
     default:
@@ -267,6 +272,8 @@ bool OuiSpyModule::matchesWatchlist(BLEAdvertisedDevice &device, const char *add
     const String deviceName = device.haveName() ? device.getName().c_str() : "";
     for (uint8_t i = 0; i < watchlistCount; ++i) {
         const auto &entry = watchlist[i];
+        if (strcmp(entry.type, "DRONE") == 0)
+            continue;
         if (strcmp(entry.type, "OUI") == 0 && normalizedAddress.startsWith(entry.value)) {
             if (label != nullptr)
                 *label = entry.label[0] != '\0' ? entry.label : "SD OUI";
@@ -305,6 +312,23 @@ bool OuiSpyModule::matchesWatchlist(BLEAdvertisedDevice &device, const char *add
                     return true;
                 }
             }
+        }
+    }
+    return false;
+}
+
+bool OuiSpyModule::matchesDroneWatchlist(const char *droneId, const char **label) const
+{
+    if (!config.droneIdsEnabled || droneId == nullptr || droneId[0] == '\0')
+        return false;
+
+    const String normalizedId = normalizeWatchlistValue(droneId);
+    for (uint8_t i = 0; i < watchlistCount; ++i) {
+        const auto &entry = watchlist[i];
+        if (strcmp(entry.type, "DRONE") == 0 && normalizedId == entry.value) {
+            if (label != nullptr)
+                *label = entry.label[0] != '\0' ? entry.label : "SD drone ID";
+            return true;
         }
     }
     return false;
@@ -379,6 +403,60 @@ void OuiSpyModule::recordFlockObservation(int rssi)
     lastFlockRssi = static_cast<int8_t>(rssi);
 }
 
+void OuiSpyModule::recordDroneId(const char *droneId, int rssi)
+{
+    if (!config.scannerEnabled || !config.skySpyEnabled || !config.droneIdsEnabled || droneId == nullptr ||
+        droneId[0] == '\0')
+        return;
+
+    const String normalizedId = normalizeWatchlistValue(droneId);
+    if (normalizedId.length() == 0)
+        return;
+
+    DronePresence *entry = nullptr;
+    DronePresence *freeEntry = nullptr;
+    for (auto &candidate : dronePresence) {
+        if (strcmp(candidate.identifier, normalizedId.c_str()) == 0) {
+            entry = &candidate;
+            break;
+        }
+        if (!candidate.active && freeEntry == nullptr)
+            freeEntry = &candidate;
+    }
+    if (entry == nullptr)
+        entry = freeEntry;
+    if (entry == nullptr)
+        entry = &dronePresence[observations % MAX_DRONE_PRESENCE];
+
+    const bool identifierChanged = strcmp(entry->identifier, normalizedId.c_str()) != 0;
+    const bool wasActive = entry->active;
+    if (identifierChanged) {
+        strncpy(entry->identifier, normalizedId.c_str(), sizeof(entry->identifier) - 1);
+        entry->identifier[sizeof(entry->identifier) - 1] = '\0';
+        entry->announced = false;
+        entry->watchlistMatched = false;
+        entry->watchlistAnnounced = false;
+    }
+    if (!wasActive) {
+        entry->announced = false;
+        entry->watchlistAnnounced = false;
+    }
+    entry->lastSeenMs = millis();
+    entry->lastRssi = static_cast<int8_t>(rssi);
+    entry->active = true;
+
+    const char *watchlistLabel = nullptr;
+    const bool watchlistMatch = matchesDroneWatchlist(normalizedId.c_str(), &watchlistLabel);
+    if (identifierChanged || !wasActive)
+        queueBleObservation(wasActive ? "drone_id_returned" : "drone_id_new", normalizedId.c_str(), rssi);
+    if (watchlistMatch && !entry->watchlistMatched) {
+        entry->watchlistMatched = true;
+        LOG_INFO("OUI-SPY drone ID watchlist match %s %s RSSI %d", watchlistLabel != nullptr ? watchlistLabel : "SD",
+                 normalizedId.c_str(), rssi);
+        queueBleObservation("drone_id_watchlist_match", normalizedId.c_str(), rssi, watchlistLabel);
+    }
+}
+
 int OuiSpyModule::handleUiInputEvent(const InputEvent *event)
 {
     return handleInputEvent(event);
@@ -439,7 +517,7 @@ void OuiSpyModule::loadWatchlistFromSd()
         else
             value.toLowerCase();
 
-        if (type != "OUI" && type != "MAC" && type != "CID" && type != "SVC" && type != "NAME")
+        if (type != "OUI" && type != "MAC" && type != "CID" && type != "SVC" && type != "NAME" && type != "DRONE")
             continue;
         auto &entry = watchlist[watchlistCount++];
         type.toCharArray(entry.type, sizeof(entry.type));
@@ -466,7 +544,7 @@ void OuiSpyModule::queueBleObservation(const char *event, const char *address, i
     auto &pending = pendingBleObservations[pendingBleObservationCount++];
     pending = PendingBleObservation{};
     strncpy(pending.event, event, sizeof(pending.event) - 1);
-    strncpy(pending.address, address, sizeof(pending.address) - 1);
+    strncpy(pending.identifier, address, sizeof(pending.identifier) - 1);
     pending.rssi = static_cast<int8_t>(rssi);
     if (label != nullptr)
         strncpy(pending.label, label, sizeof(pending.label) - 1);
@@ -482,7 +560,7 @@ void OuiSpyModule::flushBleObservation()
         pendingBleObservations[index - 1] = pendingBleObservations[index];
     --pendingBleObservationCount;
     sdLogQueueWarningLogged = false;
-    writeBleObservation(pending.event, pending.address, pending.rssi, pending.label);
+    writeBleObservation(pending.event, pending.identifier, pending.rssi, pending.label);
 }
 
 void OuiSpyModule::writeBleObservation(const char *event, const char *address, int rssi, const char *label)
@@ -597,6 +675,7 @@ void OuiSpyModule::loadConfig()
     config.skySpyEnabled = preferences.getBool("sky", config.skySpyEnabled);
     config.bleSniffEnabled = preferences.getBool("ble", config.bleSniffEnabled);
     config.axonWatchlistEnabled = preferences.getBool("axon", config.axonWatchlistEnabled);
+    config.droneIdsEnabled = preferences.getBool("drone", config.droneIdsEnabled);
     config.meshAlertsEnabled = preferences.getBool("alerts", config.meshAlertsEnabled);
     config.includeGps = preferences.getBool("gps", config.includeGps);
     config.alertChannel = preferences.getUChar("channel", config.alertChannel);
@@ -616,6 +695,7 @@ void OuiSpyModule::saveConfig()
     preferences.putBool("sky", config.skySpyEnabled);
     preferences.putBool("ble", config.bleSniffEnabled);
     preferences.putBool("axon", config.axonWatchlistEnabled);
+    preferences.putBool("drone", config.droneIdsEnabled);
     preferences.putBool("alerts", config.meshAlertsEnabled);
     preferences.putBool("gps", config.includeGps);
     preferences.putUChar("channel", config.alertChannel);
@@ -646,7 +726,7 @@ int OuiSpyModule::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
-    constexpr uint8_t settingCount = 9;
+    constexpr uint8_t settingCount = 10;
     switch (event->inputEvent) {
     case INPUT_BROKER_UP:
         selectedSetting = (selectedSetting + settingCount - 1) % settingCount;
@@ -675,19 +755,22 @@ int OuiSpyModule::handleInputEvent(const InputEvent *event)
             config.axonWatchlistEnabled = !config.axonWatchlistEnabled;
             break;
         case 6:
-            config.meshAlertsEnabled = !config.meshAlertsEnabled;
+            config.droneIdsEnabled = !config.droneIdsEnabled;
             break;
         case 7:
-            config.includeGps = !config.includeGps;
+            config.meshAlertsEnabled = !config.meshAlertsEnabled;
             break;
         case 8:
+            config.includeGps = !config.includeGps;
+            break;
+        case 9:
             config.alertChannel = (config.alertChannel + 1) % 8;
             break;
         }
         return 1;
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_RIGHT:
-        if (selectedSetting == 8) {
+        if (selectedSetting == 9) {
             if (event->inputEvent == INPUT_BROKER_LEFT)
                 config.alertChannel = (config.alertChannel + 7) % 8;
             else
@@ -714,9 +797,12 @@ int OuiSpyModule::handleInputEvent(const InputEvent *event)
                 config.axonWatchlistEnabled = !config.axonWatchlistEnabled;
                 break;
             case 6:
-                config.meshAlertsEnabled = !config.meshAlertsEnabled;
+                config.droneIdsEnabled = !config.droneIdsEnabled;
                 break;
             case 7:
+                config.meshAlertsEnabled = !config.meshAlertsEnabled;
+                break;
+            case 8:
                 config.includeGps = !config.includeGps;
                 break;
             }
@@ -804,7 +890,7 @@ void OuiSpyModule::processBlePresence()
         if (entry.active && entry.watchlistMatched && !entry.watchlistAnnounced) {
             if (canAlert) {
                 char alert[112];
-                snprintf(alert, sizeof(alert), "OUI-SPY WATCHLIST AXON: %s RSSI %d", entry.address,
+                snprintf(alert, sizeof(alert), "OUI-SPY WATCHLIST: %s RSSI %d", entry.address,
                          static_cast<int>(entry.lastRssi));
                 if (sendMeshAlert(alert)) {
                     entry.watchlistAnnounced = true;
@@ -831,6 +917,50 @@ void OuiSpyModule::processBlePresence()
             if (config.meshAlertsEnabled && (lastMeshAlertMs == 0 || now - lastMeshAlertMs >= 30000)) {
                 char alert[80];
                 snprintf(alert, sizeof(alert), "OUI-SPY BLE LOST: %s", entry.address);
+                if (sendMeshAlert(alert))
+                    return;
+            }
+        }
+    }
+}
+
+void OuiSpyModule::processDronePresence()
+{
+    constexpr uint32_t DRONE_LOST_AFTER_MS = 15000;
+    const uint32_t now = millis();
+    const bool canAlert = config.meshAlertsEnabled &&
+                          (lastMeshAlertMs == 0 || now - lastMeshAlertMs >= 30000);
+
+    for (auto &entry : dronePresence) {
+        if (entry.identifier[0] == '\0')
+            continue;
+
+        if (entry.active && entry.watchlistMatched && !entry.watchlistAnnounced && canAlert) {
+            char alert[112];
+            snprintf(alert, sizeof(alert), "OUI-SPY DRONE ID MATCH: %s RSSI %d", entry.identifier,
+                     static_cast<int>(entry.lastRssi));
+            if (sendMeshAlert(alert)) {
+                entry.watchlistAnnounced = true;
+                return;
+            }
+        }
+
+        if (entry.active && !entry.announced && canAlert) {
+            char alert[96];
+            snprintf(alert, sizeof(alert), "OUI-SPY DRONE ID: %s RSSI %d", entry.identifier,
+                     static_cast<int>(entry.lastRssi));
+            if (sendMeshAlert(alert)) {
+                entry.announced = true;
+                return;
+            }
+        }
+
+        if (entry.active && now - entry.lastSeenMs >= DRONE_LOST_AFTER_MS) {
+            entry.active = false;
+            queueBleObservation("drone_id_lost", entry.identifier, entry.lastRssi);
+            if (config.meshAlertsEnabled && (lastMeshAlertMs == 0 || now - lastMeshAlertMs >= 30000)) {
+                char alert[96];
+                snprintf(alert, sizeof(alert), "OUI-SPY DRONE ID LOST: %s", entry.identifier);
                 if (sendMeshAlert(alert))
                     return;
             }
@@ -915,6 +1045,7 @@ int32_t OuiSpyModule::runOnce()
         lastObservationMs = millis();
     }
     processBlePresence();
+    processDronePresence();
     flushBleObservation();
     if (flockObservations != 0) {
         const uint32_t newMatches = flockObservations;
@@ -960,21 +1091,21 @@ void OuiSpyModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, in
 void OuiSpyModule::drawSettings(OLEDDisplay *display, int16_t x, int16_t y)
 {
     static const char *const names[] = {"Scanner", "Flock-You", "Foxhunter", "Sky-Spy", "BLE Sniff",
-                                        "Watchlist", "Mesh alerts", "Include GPS", "Alert channel"};
+                                        "Watchlist", "Drone IDs", "Mesh alerts", "Include GPS", "Alert channel"};
     const bool values[] = {config.scannerEnabled, config.flockYouEnabled, config.foxhunterEnabled,
                            config.skySpyEnabled, config.bleSniffEnabled, config.axonWatchlistEnabled,
-                           config.meshAlertsEnabled, config.includeGps, true};
+                           config.droneIdsEnabled, config.meshAlertsEnabled, config.includeGps, true};
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(ArialMT_Plain_10);
     display->drawString(x, y, "OUI-SPY settings");
     for (uint8_t row = 0; row < 4; ++row) {
         uint8_t index = (selectedSetting / 4) * 4 + row;
-        if (index >= 9)
+        if (index >= 10)
             break;
         display->drawString(x, y + 16 + row * 14, index == selectedSetting ? ">" : " ");
         display->drawString(x + 10, y + 16 + row * 14, names[index]);
-        if (index == 8)
+        if (index == 9)
             display->drawString(x + 180, y + 16 + row * 14, String(config.alertChannel) + " " + uiAlertChannelName());
         else
             display->drawString(x + 180, y + 16 + row * 14, values[index] ? "ON" : "OFF");
