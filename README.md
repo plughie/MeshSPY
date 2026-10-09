@@ -12,7 +12,7 @@ for cooperative Wi-Fi/BLE detection and alert policy.
 
 ## Alpha release
 
-Download [MeshSPY v0.1.0-alpha.1](https://github.com/plughie/MeshSPY/releases/tag/v0.1.0-alpha.1).
+Download [MeshSPY v0.1.0-alpha.2](https://github.com/plughie/MeshSPY/releases/tag/v0.1.0-alpha.2).
 The release ZIP contains application and factory firmware images, the LittleFS
 image, installation instructions, release notes, and checksums.
 
@@ -43,7 +43,7 @@ Additional technical documentation:
 
 - [Integration assessment](docs/MESHSPY_INTEGRATION_ASSESSMENT.md)
 - [SD-card watchlist guide](docs/OUI_SPY_WATCHLIST.md)
-- [Alpha release notes](docs/RELEASE_NOTES_v0.1.0-alpha.1.md)
+- [Alpha release notes](docs/RELEASE_NOTES_v0.1.0-alpha.2.md)
 
 ## Upstream projects
 

@@ -97,7 +97,9 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     static constexpr uint8_t MAX_BLE_PRESENCE = 32;
     static constexpr uint8_t MAX_DRONE_PRESENCE = 16;
     static constexpr uint8_t MAX_WATCHLIST_ENTRIES = 64;
-    static constexpr uint8_t MAX_PENDING_BLE_OBSERVATIONS = 8;
+    // Keep a bounded backlog for high-value records without allowing the BLE
+    // callback to write directly to the shared-SPI SD card.
+    static constexpr uint8_t MAX_PENDING_BLE_OBSERVATIONS = 32;
 
     enum class ScreenMode : uint8_t { STATUS, SETTINGS };
 
@@ -107,9 +109,10 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     void configureBleScanner();
     void configureFlockMonitor();
     void loadWatchlistFromSd();
-    void queueBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
+    bool queueBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
     void flushBleObservation();
     void writeBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
+    void processGenericBleSummary();
     void drawSettings(OLEDDisplay *display, int16_t x, int16_t y);
     bool sendMeshAlert(const char *message);
     void processBlePresence();
@@ -148,6 +151,10 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     bool sdLogQueueWarningLogged = false;
     PendingBleObservation pendingBleObservations[MAX_PENDING_BLE_OBSERVATIONS];
     uint8_t pendingBleObservationCount = 0;
+    uint32_t genericBleNewCount = 0;
+    uint32_t genericBleLostCount = 0;
+    uint32_t lastGenericBleSummaryMs = 0;
+    int8_t genericBleLastRssi = 0;
     uint32_t flockObservations = 0;
     uint32_t flockMatchesTotal = 0;
     int8_t lastFlockRssi = 0;

@@ -10,7 +10,7 @@ SD card or its existing persistent data:
 
 ```sh
 esptool --chip esp32s3 --port PORT write-flash 0x10000 \
-  firmware-t-deck-tft-2.8.2.364a111.bin
+  firmware-t-deck-tft-2.8.3.<build-hash>.bin
 ```
 
 Replace `PORT` with the device port, such as `/dev/cu.usbmodem141101` on macOS.
@@ -23,7 +23,7 @@ and application image. It is intended for a complete firmware installation:
 
 ```sh
 esptool --chip esp32s3 --port PORT write-flash 0x0 \
-  firmware-t-deck-tft-2.8.2.364a111.factory.bin
+  firmware-t-deck-tft-2.8.3.<build-hash>.factory.bin
 ```
 
 Back up important device settings first. A factory image can replace the

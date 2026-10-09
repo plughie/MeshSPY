@@ -47,7 +47,7 @@ enabled.
 
 ## Detection history
 
-BLE state transitions are appended to:
+High-value BLE state transitions are appended to:
 
 ```text
 /OUI-SPY/observations.jsonl
@@ -56,5 +56,9 @@ BLE state transitions are appended to:
 Each line is a JSON object. The current implementation records BLE transition
 events and normalized drone-ID transition events, including uptime, identifier,
 RSSI, and GPS coordinates when GPS inclusion is enabled and a fix is available.
-It deliberately does not write every repeated advertisement, which limits SD
-wear and shared-SPI contention.
+Generic BLE advertisers are counted and written as periodic `ble_summary`
+records rather than one SD transaction per address. This is intentional: a busy
+RF environment can produce a continuous stream of rotating advertisers faster
+than the shared-SPI SD writer can persist them individually. Generic devices
+remain visible in the serial log, while mesh alerts are reserved for watchlist
+and detector events.
