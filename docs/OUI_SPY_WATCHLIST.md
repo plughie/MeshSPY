@@ -31,3 +31,17 @@ Enable **Tools → OUI-SPY → Watchlist** and reboot after changing the file.
 Watchlist matches are logged and can generate ordinary Meshtastic alerts when
 **Mesh alerts** is enabled. The built-in Axon signatures remain available as
 fallbacks when the Watchlist setting is enabled.
+
+## Detection history
+
+BLE state transitions are appended to:
+
+```text
+/OUI-SPY/observations.jsonl
+```
+
+Each line is a JSON object. The current implementation records `ble_new`,
+`ble_returned`, `ble_watchlist_match`, and `ble_lost` events, including uptime,
+address, RSSI, and GPS coordinates when GPS inclusion is enabled and a fix is
+available. It deliberately does not write every repeated advertisement, which
+limits SD wear and shared-SPI contention.

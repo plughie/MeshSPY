@@ -59,13 +59,18 @@ OUI-SPY detector services
 
 The alert manager is policy-only: per-detector enablement, watchlists, deduplication, cooldowns, rate limits, optional GPS, and periodic summaries. Local capture remains enabled independently. A future command handler should accept only authenticated/private requests and never expose raw capture data by default.
 
-The first implementation slice in this fork registers an OUI-SPY application frame and cooperative scheduler boundary without altering the radio, filesystem, or normal UI initialization. It deliberately emits no synthetic detections and no mesh traffic.
+The current implementation registers an OUI-SPY application frame and
+cooperative scheduler boundary without altering normal radio or UI
+initialization. BLE state transitions are archived as JSON Lines on the shared
+SD card under `/OUI-SPY/observations.jsonl`; watchlist matching and mesh
+notification remain independent policies. The archive writes only state
+transitions rather than every repeated advertisement.
 
 ## Implementation sequence
 
-1. Keep the Meshtastic T-Deck target buildable and add the OUI-SPY application/module boundary.
+1. Keep the Meshtastic T-Deck target buildable and add the OUI-SPY application/module boundary. **Complete.**
 2. Create a normalized observation ABI and import detector logic one service at a time, beginning with BLE detector/Foxhunter, then Sky-Spy, then Flock-You Wi-Fi, then BLE/packet capture.
-3. Add a PSRAM-backed bounded event/PCAP queue and a shared-SPI SD archive writer.
+3. Add a PSRAM-backed bounded event/PCAP queue and a shared-SPI SD archive writer. **Initial JSONL archive complete; bounded PCAP/event queue remains.**
 4. Add GPS enrichment and versioned JSON-lines/CSV observation records.
 5. Add SD-card CoT export, including track/update identity rules for moving Remote ID targets.
 6. Add configurable ordinary Meshtastic text alerts on a selected standard private channel, with dedupe/rate limits and location privacy controls.

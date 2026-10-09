@@ -83,6 +83,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     void configureBleScanner();
     void configureFlockMonitor();
     void loadWatchlistFromSd();
+    void writeBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
     void drawSettings(OLEDDisplay *display, int16_t x, int16_t y);
     bool sendMeshAlert(const char *message);
     void processBlePresence();
@@ -114,6 +115,7 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     WatchlistEntry watchlist[MAX_WATCHLIST_ENTRIES];
     uint8_t watchlistCount = 0;
     bool watchlistLoaded = false;
+    bool sdLogFailureLogged = false;
     uint32_t flockObservations = 0;
     uint32_t flockMatchesTotal = 0;
     int8_t lastFlockRssi = 0;

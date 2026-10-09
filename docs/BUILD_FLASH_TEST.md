@@ -21,10 +21,11 @@ the T-Deck select button to open its settings screen.
 - `BACK` / `CANCEL`: return without saving
 
 The settings currently cover the master scanner switch, Flock-You, Foxhunter,
-Sky-Spy, BLE Sniff, mesh alerts, GPS inclusion, and an alert-channel slot.
-They are stored locally in the ESP32 NVS namespace `meshspy`. All switches
-default to off except GPS inclusion, and this milestone does not yet start
-detector services or transmit alerts.
+Sky-Spy, BLE Sniff, watchlist matching, mesh alerts, GPS inclusion, and an
+alert-channel slot. They are stored locally in the ESP32 NVS namespace
+`meshspy`. All switches default to off except GPS inclusion. Enabled BLE
+recognition records state transitions to `/OUI-SPY/observations.jsonl` on the
+SD card; mesh alerts remain independently configurable.
 
 ## Flash
 
@@ -34,7 +35,7 @@ Follow the normal Meshtastic T-Deck DFU/esptool procedure for the generated arti
 
 1. Build succeeds for `t-deck-tft`.
 2. Meshtastic UI, keyboard, trackball, touch, GPS, SD diagnostics, and SX1262 initialization remain functional.
-3. The OUI-SPY frame reports scheduler health without claiming detections.
+3. The OUI-SPY frame reports scheduler health and enabled detector activity.
 4. Two ordinary Meshtastic nodes exchange messages while the T-Deck is running.
 5. No OUI-SPY code calls `WiFi.mode(WIFI_OFF)`, `esp_wifi_restore()`, `SD.begin()`, or direct SX1262 operations from the module scheduler.
 

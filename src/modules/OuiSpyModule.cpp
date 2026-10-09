@@ -26,6 +26,8 @@ OuiSpyModule *ouiSpyModule = nullptr;
 
 namespace {
 constexpr const char *WATCHLIST_PATH = "/OUI-SPY/watchlist.csv";
+constexpr const char *OBSERVATION_DIR = "/OUI-SPY";
+constexpr const char *OBSERVATION_LOG_PATH = "/OUI-SPY/observations.jsonl";
 
 String normalizeWatchlistValue(const char *value)
 {
@@ -343,20 +345,30 @@ void OuiSpyModule::recordBleAdvertisement(BLEAdvertisedDevice &device)
     if (entry == nullptr)
         entry = &blePresence[bleDevicesSeen % MAX_BLE_PRESENCE];
 
-    if (strncmp(entry->address, address, sizeof(entry->address)) != 0) {
+    const bool addressChanged = strncmp(entry->address, address, sizeof(entry->address)) != 0;
+    const bool wasActive = entry->active;
+    if (addressChanged) {
         strncpy(entry->address, address, sizeof(entry->address) - 1);
         entry->address[sizeof(entry->address) - 1] = '\0';
         entry->announced = false;
         entry->watchlistMatched = false;
         entry->watchlistAnnounced = false;
     }
+    if (!wasActive) {
+        entry->announced = false;
+        entry->watchlistAnnounced = false;
+    }
     entry->lastSeenMs = millis();
     entry->lastRssi = static_cast<int8_t>(rssi);
     entry->active = true;
+    if (addressChanged || !wasActive)
+        writeBleObservation(wasActive ? "ble_returned" : "ble_new", address, rssi);
+
     if (axonMatch && !entry->watchlistMatched) {
         entry->watchlistMatched = true;
         LOG_INFO("OUI-SPY watchlist match %s %s RSSI %d", watchlistLabel != nullptr ? watchlistLabel : "SD", address,
                  rssi);
+        writeBleObservation("ble_watchlist_match", address, rssi, watchlistLabel);
     }
 }
 
@@ -437,6 +449,73 @@ void OuiSpyModule::loadWatchlistFromSd()
     file.close();
     watchlistLoaded = true;
     LOG_INFO("OUI-SPY watchlist: loaded %u entries from %s", watchlistCount, WATCHLIST_PATH);
+}
+
+void OuiSpyModule::writeBleObservation(const char *event, const char *address, int rssi, const char *label)
+{
+    if (event == nullptr || address == nullptr || event[0] == '\0' || address[0] == '\0')
+        return;
+
+    concurrency::LockGuard guard(spiLock);
+    if (SD.cardType() == CARD_NONE)
+        return;
+
+    if (!SD.exists(OBSERVATION_DIR) && !SD.mkdir(OBSERVATION_DIR)) {
+        if (!sdLogFailureLogged) {
+            LOG_WARN("OUI-SPY SD log: unable to create %s", OBSERVATION_DIR);
+            sdLogFailureLogged = true;
+        }
+        return;
+    }
+
+    File file = SD.open(OBSERVATION_LOG_PATH, FILE_APPEND);
+    if (!file) {
+        if (!sdLogFailureLogged) {
+            LOG_WARN("OUI-SPY SD log: unable to open %s", OBSERVATION_LOG_PATH);
+            sdLogFailureLogged = true;
+        }
+        return;
+    }
+
+    String line = "{\"event\":\"";
+    line += event;
+    line += "\",\"uptime_ms\":";
+    line += String(millis());
+    line += ",\"address\":\"";
+    line += address;
+    line += "\",\"rssi\":";
+    line += String(rssi);
+
+    if (label != nullptr && label[0] != '\0') {
+        line += ",\"label\":\"";
+        for (const char *cursor = label; *cursor != '\0'; ++cursor) {
+            if (*cursor == '\\' || *cursor == '"')
+                line += '\\';
+            line += *cursor;
+        }
+        line += '"';
+    }
+
+    const bool includePosition = config.includeGps && gpsStatus != nullptr && gpsStatus->getHasLock();
+    line += ",\"gps\":";
+    line += includePosition ? "true" : "false";
+    if (includePosition) {
+        line += ",\"latitude\":";
+        line += String(gpsStatus->getLatitude() * 1e-7, 7);
+        line += ",\"longitude\":";
+        line += String(gpsStatus->getLongitude() * 1e-7, 7);
+        line += ",\"altitude_m\":";
+        line += String(gpsStatus->getAltitude());
+    }
+    line += "}\n";
+
+    if (file.print(line) == 0 && !sdLogFailureLogged) {
+        LOG_WARN("OUI-SPY SD log: write failed for %s", OBSERVATION_LOG_PATH);
+        sdLogFailureLogged = true;
+    } else {
+        sdLogFailureLogged = false;
+    }
+    file.close();
 }
 
 void OuiSpyModule::configureBleScanner()
@@ -714,6 +793,7 @@ void OuiSpyModule::processBlePresence()
 
         if (entry.active && now - entry.lastSeenMs >= BLE_LOST_AFTER_MS) {
             entry.active = false;
+            writeBleObservation("ble_lost", entry.address, entry.lastRssi);
             if (config.meshAlertsEnabled && (lastMeshAlertMs == 0 || now - lastMeshAlertMs >= 30000)) {
                 char alert[80];
                 snprintf(alert, sizeof(alert), "OUI-SPY BLE LOST: %s", entry.address);
