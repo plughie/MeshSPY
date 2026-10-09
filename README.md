@@ -17,9 +17,10 @@
 ## MeshSPY
 
 MeshSPY is a T-Deck Plus firmware fork that combines Meshtastic mesh
-communication with the OUI-SPY Unified Blue detector feature set. It is an
-**A Bug-Mag.net project by DuvTheDove** ([GitHub](https://github.com/plughie)),
-with implementation assistance from **OpenAI Codex**.
+communication with the OUI-SPY Unified Blue detector feature set. It is a
+[Bug-Mag.net](https://a-bug-mag.net) Project by DuvTheDove
+([GitHub](https://github.com/plughie)), with implementation assistance from
+**OpenAI Codex**.
 
 The primary target is the LILYGO T-Deck Plus (`t-deck-tft`). MeshSPY preserves
 the normal Meshtastic UI and LoRa operation while adding an OUI-SPY application
