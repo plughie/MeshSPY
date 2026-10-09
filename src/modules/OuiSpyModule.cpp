@@ -362,13 +362,13 @@ void OuiSpyModule::recordBleAdvertisement(BLEAdvertisedDevice &device)
     entry->lastRssi = static_cast<int8_t>(rssi);
     entry->active = true;
     if (addressChanged || !wasActive)
-        writeBleObservation(wasActive ? "ble_returned" : "ble_new", address, rssi);
+        queueBleObservation(wasActive ? "ble_returned" : "ble_new", address, rssi);
 
     if (axonMatch && !entry->watchlistMatched) {
         entry->watchlistMatched = true;
         LOG_INFO("OUI-SPY watchlist match %s %s RSSI %d", watchlistLabel != nullptr ? watchlistLabel : "SD", address,
                  rssi);
-        writeBleObservation("ble_watchlist_match", address, rssi, watchlistLabel);
+        queueBleObservation("ble_watchlist_match", address, rssi, watchlistLabel);
     }
 }
 
@@ -449,6 +449,40 @@ void OuiSpyModule::loadWatchlistFromSd()
     file.close();
     watchlistLoaded = true;
     LOG_INFO("OUI-SPY watchlist: loaded %u entries from %s", watchlistCount, WATCHLIST_PATH);
+}
+
+void OuiSpyModule::queueBleObservation(const char *event, const char *address, int rssi, const char *label)
+{
+    if (event == nullptr || address == nullptr || event[0] == '\0' || address[0] == '\0')
+        return;
+    if (pendingBleObservationCount >= MAX_PENDING_BLE_OBSERVATIONS) {
+        if (!sdLogQueueWarningLogged) {
+            LOG_WARN("OUI-SPY SD log: observation queue full");
+            sdLogQueueWarningLogged = true;
+        }
+        return;
+    }
+
+    auto &pending = pendingBleObservations[pendingBleObservationCount++];
+    pending = PendingBleObservation{};
+    strncpy(pending.event, event, sizeof(pending.event) - 1);
+    strncpy(pending.address, address, sizeof(pending.address) - 1);
+    pending.rssi = static_cast<int8_t>(rssi);
+    if (label != nullptr)
+        strncpy(pending.label, label, sizeof(pending.label) - 1);
+}
+
+void OuiSpyModule::flushBleObservation()
+{
+    if (pendingBleObservationCount == 0)
+        return;
+
+    const PendingBleObservation pending = pendingBleObservations[0];
+    for (uint8_t index = 1; index < pendingBleObservationCount; ++index)
+        pendingBleObservations[index - 1] = pendingBleObservations[index];
+    --pendingBleObservationCount;
+    sdLogQueueWarningLogged = false;
+    writeBleObservation(pending.event, pending.address, pending.rssi, pending.label);
 }
 
 void OuiSpyModule::writeBleObservation(const char *event, const char *address, int rssi, const char *label)
@@ -793,7 +827,7 @@ void OuiSpyModule::processBlePresence()
 
         if (entry.active && now - entry.lastSeenMs >= BLE_LOST_AFTER_MS) {
             entry.active = false;
-            writeBleObservation("ble_lost", entry.address, entry.lastRssi);
+            queueBleObservation("ble_lost", entry.address, entry.lastRssi);
             if (config.meshAlertsEnabled && (lastMeshAlertMs == 0 || now - lastMeshAlertMs >= 30000)) {
                 char alert[80];
                 snprintf(alert, sizeof(alert), "OUI-SPY BLE LOST: %s", entry.address);
@@ -881,6 +915,7 @@ int32_t OuiSpyModule::runOnce()
         lastObservationMs = millis();
     }
     processBlePresence();
+    flushBleObservation();
     if (flockObservations != 0) {
         const uint32_t newMatches = flockObservations;
         observations += flockObservations;

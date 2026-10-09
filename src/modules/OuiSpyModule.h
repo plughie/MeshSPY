@@ -72,8 +72,16 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
         char label[32] = {};
     };
 
+    struct PendingBleObservation {
+        char event[24] = {};
+        char address[18] = {};
+        char label[32] = {};
+        int8_t rssi = 0;
+    };
+
     static constexpr uint8_t MAX_BLE_PRESENCE = 32;
     static constexpr uint8_t MAX_WATCHLIST_ENTRIES = 64;
+    static constexpr uint8_t MAX_PENDING_BLE_OBSERVATIONS = 8;
 
     enum class ScreenMode : uint8_t { STATUS, SETTINGS };
 
@@ -83,6 +91,8 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     void configureBleScanner();
     void configureFlockMonitor();
     void loadWatchlistFromSd();
+    void queueBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
+    void flushBleObservation();
     void writeBleObservation(const char *event, const char *address, int rssi, const char *label = nullptr);
     void drawSettings(OLEDDisplay *display, int16_t x, int16_t y);
     bool sendMeshAlert(const char *message);
@@ -116,6 +126,9 @@ class OuiSpyModule : public SinglePortModule, private concurrency::OSThread
     uint8_t watchlistCount = 0;
     bool watchlistLoaded = false;
     bool sdLogFailureLogged = false;
+    bool sdLogQueueWarningLogged = false;
+    PendingBleObservation pendingBleObservations[MAX_PENDING_BLE_OBSERVATIONS];
+    uint8_t pendingBleObservationCount = 0;
     uint32_t flockObservations = 0;
     uint32_t flockMatchesTotal = 0;
     int8_t lastFlockRssi = 0;
