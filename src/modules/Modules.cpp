@@ -91,6 +91,10 @@
 #include "modules/GenericThreadModule.h"
 #endif
 
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+#include "OuiSpyModule.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
@@ -136,6 +140,9 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+    new OuiSpyModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif

@@ -42,6 +42,16 @@ static bool bluetoothMemoryReleased;
 static bool bluetoothMemoryReleaseWarned;
 #endif
 
+#if defined(T_DECK) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+// Keep the persisted Bluetooth setting false so the T-Deck color UI does not
+// enter its programming screen on every reboot.  BLE is still the active phone
+// transport whenever WiFi is disabled.
+static bool tDeckBleRecoveryActive()
+{
+    return !config.network.wifi_enabled;
+}
+#endif
+
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 static bool isNetworkConfiguredToDisableBluetooth()
 {
@@ -66,6 +76,12 @@ static bool isPaxcounterActiveForBoot()
 
 static bool shouldReleaseBluetoothMemory()
 {
+#if defined(T_DECK)
+    if (tDeckBleRecoveryActive()) {
+        return false;
+    }
+#endif
+
     // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
     // ESP32 BLE controller memory for scanning.
     if (isPaxcounterActiveForBoot()) {
@@ -102,11 +118,24 @@ void setBluetoothEnable(bool enable)
     }
 
 #if defined(USE_WS5500) || defined(USE_CH390D)
-    if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
+    if (((config.bluetooth.enabled == true) ||
+#if defined(T_DECK)
+         tDeckBleRecoveryActive() ||
+#endif
+         false) && (config.network.wifi_enabled == false))
 #elif HAS_WIFI
-    if (!isWifiAvailable() && config.bluetooth.enabled == true)
+    if (!isWifiAvailable() &&
+        (config.bluetooth.enabled == true ||
+#if defined(T_DECK)
+         tDeckBleRecoveryActive() ||
+#endif
+         false))
 #else
-    if (config.bluetooth.enabled == true)
+    if (config.bluetooth.enabled == true
+#if defined(T_DECK)
+        || tDeckBleRecoveryActive()
+#endif
+    )
 #endif
     {
         if (!nimbleBluetooth) {
@@ -115,6 +144,7 @@ void setBluetoothEnable(bool enable)
         if (enable && !nimbleBluetooth->isActive()) {
             powerMon->setState(meshtastic_PowerMon_State_BT_On);
             nimbleBluetooth->setup();
+            LOG_INFO("Bluetooth enabled for T-Deck phone connectivity (WiFi disabled)");
         }
         // For ESP32, no way to recover from bluetooth shutdown without reboot
         // BLE advertising automatically stops when MCU enters light-sleep(?)

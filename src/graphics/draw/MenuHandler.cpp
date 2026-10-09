@@ -17,6 +17,9 @@
 #include "graphics/Backlight.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+#include "modules/OuiSpyModule.h"
+#endif
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/UIRenderer.h"
@@ -1335,7 +1338,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, OuiSpy, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1369,6 +1372,13 @@ void menuHandler::systemBaseMenu()
         optionsEnumArray[options++] = Test;
     }
 
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+    if (ouiSpyModule) {
+        optionsArray[options] = "OUI-SPY";
+        optionsEnumArray[options++] = OuiSpy;
+    }
+#endif
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -1390,6 +1400,12 @@ void menuHandler::systemBaseMenu()
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::TestMenu;
             screen->runNow();
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+        } else if (selected == OuiSpy && ouiSpyModule) {
+            ouiSpyModule->openSettings();
+            screen->setFrames(graphics::Screen::FOCUS_MODULE);
+            screen->runNow();
+#endif
         } else if (selected == Bluetooth) {
             menuQueue = BluetoothToggleMenu;
             screen->runNow();

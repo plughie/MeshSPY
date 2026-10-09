@@ -237,14 +237,14 @@ static void onNetworkConnected()
         }
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            initWebServer();
-        }
+        // The T-Deck color UI is a local client, not a reason to disable the
+        // network services.  Keep the web UI available alongside the TFT UI.
+        initWebServer();
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            initApiServer();
-        }
+        // Likewise, keep the normal Meshtastic TCP API available for phone
+        // apps and other clients when the device uses the color UI.
+        initApiServer();
 #endif
         APStartupComplete = true;
     }

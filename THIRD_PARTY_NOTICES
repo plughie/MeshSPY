@@ -1,0 +1,37 @@
+MeshSPY third-party notices
+===========================
+
+Meshtastic
+----------
+MeshSPY is based on the Meshtastic firmware project:
+https://github.com/meshtastic/firmware
+
+Meshtastic firmware is distributed under the GNU General Public License,
+version 3. The complete license text is included in this repository as
+LICENSE. Meshtastic copyright and source-availability obligations apply to
+distributed MeshSPY firmware.
+
+OUI-SPY Unified Blue
+--------------------
+MeshSPY integrates the OUI-SPY Unified Blue feature set and acknowledges the
+project as a reference/source project:
+https://github.com/colonelpanichacks/oui-spy-unified-blue
+
+The referenced repository did not include a license file at the time this fork
+was prepared. Its author is credited here, but no additional license is
+asserted for OUI-SPY material. Please obtain explicit permission from the
+OUI-SPY author before redistributing copied OUI-SPY source or binaries.
+
+Project attribution
+-------------------
+MeshSPY is an A Bug-Mag.net project by DuvTheDove. Project maintainer:
+https://github.com/plughie
+
+Implementation assistance: OpenAI Codex.
+
+Other dependencies
+------------------
+The Meshtastic dependency tree contains additional third-party libraries with
+their own licenses. Their upstream notices remain authoritative; consult the
+PlatformIO dependency metadata and each dependency's source distribution when
+redistributing a complete firmware image.

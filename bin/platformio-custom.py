@@ -411,6 +411,8 @@ for pref in userPrefs:
 # Calculate unix epoch for current day (midnight)
 current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 build_epoch = int(current_date.timestamp())
+build_id = env.get("MESHSPY_BUILD_ID") or datetime.now().strftime("%Y%m%d-%H%M%S")
+env.Replace(MESHSPY_BUILD_ID=build_id)
 
 flags = [
         "-DAPP_VERSION=" + verObj["long"],
@@ -418,6 +420,7 @@ flags = [
         "-DAPP_ENV=" + env.get("PIOENV"),
         "-DAPP_REPO=" + repo_owner,
         "-DBUILD_EPOCH=" + str(build_epoch),
+        "-DMESHSPY_BUILD_ID=" + env.StringifyMacro(build_id),
     ] + pref_flags
 
 print("Using flags:")

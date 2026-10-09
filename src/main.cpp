@@ -364,6 +364,7 @@ void waitUntilPowerLevelSafe()
 void printInfo()
 {
     LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
+    LOG_INFO("MeshSPY build ID: %s", MESHSPY_BUILD_ID);
 }
 #ifndef PIO_UNIT_TESTING
 void setup()
@@ -865,6 +866,17 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+
+#if defined(T_DECK) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    // The T-Deck color UI uses the persisted Bluetooth flag to enter its
+    // programming screen. Keep that flag clear in WiFi-off recovery mode;
+    // main-esp32.cpp starts BLE at runtime instead.
+    if (!config.network.wifi_enabled && config.bluetooth.enabled) {
+        config.bluetooth.enabled = false;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        LOG_INFO("Cleared stale T-Deck Bluetooth programming-mode state");
+    }
+#endif
 #ifdef ARCH_ESP32
     // Config is loaded now, and Bluetooth has not been initialized yet. If the
     // saved config will keep Bluetooth inactive, return its reserved memory early.

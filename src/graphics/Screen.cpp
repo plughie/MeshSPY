@@ -82,6 +82,9 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+#include "modules/OuiSpyModule.h"
+#endif
 #if BASEUI_HAS_GAMES
 #include "modules/games/GamesModule.h"
 #endif
@@ -1566,7 +1569,12 @@ void Screen::setFrames(FrameFocus focus)
                 fsi.positions.waypoint = numframes;
 
             indicatorIcons.push_back(icon_module);
-            PUSH_FRAME_TITLE("Module");
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+            if (m == ouiSpyModule)
+                PUSH_FRAME_TITLE("OUI-SPY");
+            else
+#endif
+                PUSH_FRAME_TITLE("Module");
             numframes++;
         }
     }
@@ -2200,6 +2208,17 @@ int Screen::handleInputEvent(const InputEvent *event)
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
+#if defined(T_DECK) && !defined(MESHTASTIC_EXCLUDE_OUI_SPY)
+    // Color UI builds do not create an InputBroker. Forward keypad events to
+    // the focused OUI-SPY frame so its settings screen remains usable.
+    if (ouiSpyModule && ui->getUiState()->currentFrame < moduleFrames.size() &&
+        moduleFrames[ui->getUiState()->currentFrame] == ouiSpyModule) {
+        if (ouiSpyModule->handleUiInputEvent(event)) {
+            setFastFramerate();
+            return 0;
+        }
+    }
+#endif
     // UP/DOWN in message screen scrolls through message threads
     if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 

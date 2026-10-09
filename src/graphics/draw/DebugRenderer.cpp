@@ -534,6 +534,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++] + y, appversionstr);
 
+    if (SCREEN_HEIGHT > 96 && line < 6) {
+        char buildstr[40];
+        snprintf(buildstr, sizeof(buildstr), "Build: %s", MESHSPY_BUILD_ID);
+        textWidth = display->getStringWidth(buildstr);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++] + y, buildstr);
+    }
+
     if (!graphics::isCompactPanel(display) &&
         (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5))) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
