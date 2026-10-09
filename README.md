@@ -43,7 +43,8 @@ for cooperative Wi-Fi/BLE detection and alert policy.
 
 See [build, flash, and test procedures](docs/BUILD_FLASH_TEST.md), the
 [integration assessment](docs/MESHSPY_INTEGRATION_ASSESSMENT.md), and the
-[SD-card watchlist guide](docs/OUI_SPY_WATCHLIST.md).
+[SD-card watchlist guide](docs/OUI_SPY_WATCHLIST.md). Release installation
+instructions are in [INSTALL.md](INSTALL.md).
 
 ```sh
 pio run -e t-deck-tft
