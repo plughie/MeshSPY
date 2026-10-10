@@ -40,12 +40,13 @@ jobs:
 
       - name: Resolve PlatformIO packages
         run: |
-          pio pkg install -e t-deck-tft || true
-          scons_file="$(find "$HOME/.platformio" -type f \
-            -path '*/scons-local-4.11.1/SCons/Tool/FortranCommon.py' \
-            -print -quit)"
-          test -n "$scons_file"
-          scons_lib="${scons_file%/SCons/Tool/FortranCommon.py}"
+          scons_archive="$RUNNER_TEMP/scons-local-4.11.1.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/pioarduino/scons/releases/download/4.11.1/scons-local-4.11.1.tar.gz \
+            --output "$scons_archive"
+          tar -xzf "$scons_archive" -C "$RUNNER_TEMP"
+          scons_lib="$RUNNER_TEMP/scons-local-4.11.1"
+          test -f "$scons_lib/SCons/Tool/FortranCommon.py"
           echo "SCONS_LIB_DIR=$scons_lib" >> "$GITHUB_ENV"
           echo "Using SCons library: $scons_lib"
 
