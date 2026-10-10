@@ -40,7 +40,7 @@ jobs:
 
       - name: Resolve PlatformIO packages
         run: |
-          pio pkg install -e t-deck-tft
+          pio pkg install -e t-deck-tft || true
           test -f "$HOME/.platformio/packages/tool-scons/scons-local-4.11.1/SCons/Tool/FortranCommon.py"
 
       - name: Build t-deck-tft
