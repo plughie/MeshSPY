@@ -41,12 +41,16 @@ jobs:
       - name: Resolve PlatformIO packages
         run: |
           pio pkg install -e t-deck-tft || true
-          test -f "$HOME/.platformio/tools/tool-scons/scons-local-4.11.1/SCons/Tool/FortranCommon.py"
+          scons_file="$(find "$HOME/.platformio" -type f \
+            -path '*/scons-local-4.11.1/SCons/Tool/FortranCommon.py' \
+            -print -quit)"
+          test -n "$scons_file"
+          scons_lib="${scons_file%/SCons/Tool/FortranCommon.py}"
+          echo "SCONS_LIB_DIR=$scons_lib" >> "$GITHUB_ENV"
+          echo "Using SCons library: $scons_lib"
 
       - name: Build t-deck-tft
-        run: |
-          SCONS_LIB_DIR="$HOME/.platformio/tools/tool-scons/scons-local-4.11.1" \
-            pio run -e t-deck-tft
+        run: pio run -e t-deck-tft
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
