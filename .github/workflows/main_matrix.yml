@@ -31,7 +31,12 @@ jobs:
           cache: pip
 
       - name: Install PlatformIO
-        run: python -m pip install --upgrade platformio
+        run: |
+          python -m pip install --upgrade platformio==6.2.0 scons==4.11.1
+          python - <<'PY'
+          import SCons.Tool.FortranCommon
+          print("SCons.Tool.FortranCommon is available")
+          PY
 
       - name: Build t-deck-tft
         run: pio run -e t-deck-tft
